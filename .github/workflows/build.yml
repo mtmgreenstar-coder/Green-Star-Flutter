@@ -92,10 +92,8 @@ jobs:
                       useOnDownloadStart: true,
                     ),
                     onShowFileChooser: (controller, request) async {
-                      final multiple = request.mode ==
-                          ShowFileChooserRequestMode.openMultiple;
                       final result = await FilePicker.platform.pickFiles(
-                        allowMultiple: multiple,
+                        allowMultiple: false,
                         withData: false,
                       );
                       if (result == null) {
