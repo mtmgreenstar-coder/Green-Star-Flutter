@@ -17,12 +17,79 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Prepare app source
+      - name: Prepare HTML and Flutter project
         run: |
           unzip -o Green-Star-Android-Source.zip
           mkdir -p assets/www
           cp www/index.html assets/www/index.html
           flutter create --platforms=android --org com.greenstar --project-name green_star .
+          cat > pubspec.yaml <<'EOF'
+          name: green_star
+          description: Green Star Android app
+          publish_to: 'none'
+          version: 1.0.0+1
+          environment:
+            sdk: '>=3.3.0 <4.0.0'
+          dependencies:
+            flutter:
+              sdk: flutter
+            webview_flutter: ^4.10.0
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^5.0.0
+          flutter:
+            uses-material-design: true
+            assets:
+              - assets/www/
+          EOF
+          cat > lib/main.dart <<'EOF'
+          import 'package:flutter/material.dart';
+          import 'package:webview_flutter/webview_flutter.dart';
+
+          void main() => runApp(const GreenStarApp());
+
+          class GreenStarApp extends StatelessWidget {
+            const GreenStarApp({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return const MaterialApp(
+                debugShowCheckedModeBanner: false,
+                home: GreenStarHome(),
+              );
+            }
+          }
+
+          class GreenStarHome extends StatefulWidget {
+            const GreenStarHome({super.key});
+
+            @override
+            State<GreenStarHome> createState() => _GreenStarHomeState();
+          }
+
+          class _GreenStarHomeState extends State<GreenStarHome> {
+            late final WebViewController controller;
+
+            @override
+            void initState() {
+              super.initState();
+              controller = WebViewController()
+                ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                ..setBackgroundColor(const Color(0xFFFFFFFF))
+                ..loadFlutterAsset('assets/www/index.html');
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: SafeArea(
+                  child: WebViewWidget(controller: controller),
+                ),
+              );
+            }
+          }
+          EOF
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
