@@ -17,40 +17,47 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Prepare HTML and Flutter project
+      - name: Prepare baseline WebView app
         run: |
           unzip -o Green-Star-Android-Source.zip
-          mkdir -p assets/www
+          mkdir -p assets/www assets
           cp www/index.html assets/www/index.html
+          cp logo.png assets/app_icon.png
           flutter create --platforms=android --org com.greenstar --project-name green_star .
           cat > pubspec.yaml <<'EOF'
           name: green_star
           description: Green Star Android app
           publish_to: 'none'
-          version: 1.0.1+2
+          version: 1.0.2+4
           environment:
             sdk: '>=3.8.0 <4.0.0'
           dependencies:
             flutter:
               sdk: flutter
-            in_app_webview_flutter: ^1.0.0
+            webview_flutter: ^4.10.0
+            webview_flutter_android: ^4.10.0
             file_picker: ^10.3.3
-            url_launcher: ^6.3.2
           dev_dependencies:
             flutter_test:
               sdk: flutter
             flutter_lints: ^5.0.0
+            flutter_launcher_icons: ^0.14.4
           flutter:
             uses-material-design: true
             assets:
               - assets/www/
+          flutter_launcher_icons:
+            android: true
+            ios: false
+            image_path: assets/app_icon.png
+            adaptive_icon_background: "#ffffff"
+            adaptive_icon_foreground: assets/app_icon.png
           EOF
           cat > lib/main.dart <<'EOF'
           import 'package:flutter/material.dart';
-          import 'package:flutter/services.dart';
+          import 'package:webview_flutter/webview_flutter.dart';
+          import 'package:webview_flutter_android/webview_flutter_android.dart';
           import 'package:file_picker/file_picker.dart';
-          import 'package:in_app_webview_flutter/flutter_inappwebview.dart';
-          import 'package:url_launcher/url_launcher.dart';
 
           void main() => runApp(const GreenStarApp());
 
@@ -74,78 +81,64 @@ jobs:
           }
 
           class _GreenStarHomeState extends State<GreenStarHome> {
-            late final Future<String> htmlFuture;
+            late final WebViewController controller;
 
             @override
             void initState() {
               super.initState();
-              htmlFuture = rootBundle.loadString('assets/www/index.html');
+              controller = WebViewController()
+                ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                ..setBackgroundColor(const Color(0xFFFFFFFF))
+                ..setNavigationDelegate(
+                  NavigationDelegate(
+                    onPageFinished: (url) async {
+                      await controller.runJavaScript(r"""
+                        (() => {
+                          const removeUnwantedControls = () => {
+                            document.querySelectorAll('button, input, a, [role="button"]').forEach((el) => {
+                              const label = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + '')
+                                .replace(/\s+/g, ' ').trim();
+                              if (/پرینت|چاپ/.test(label) ||
+                                  /خروجی/.test(label) ||
+                                  /ورودی/.test(label)) {
+                                el.style.setProperty('display', 'none', 'important');
+                              }
+                            });
+                          };
+                          removeUnwantedControls();
+                          new MutationObserver(removeUnwantedControls).observe(document.documentElement, {
+                            childList: true, subtree: true, characterData: true
+                          });
+                        })();
+                      """);
+                    },
+                  ),
+                )
+                ..loadFlutterAsset('assets/www/index.html');
+
+              if (controller.platform is AndroidWebViewController) {
+                final androidController =
+                    controller.platform as AndroidWebViewController;
+                androidController.setOnShowFileSelector((params) async {
+                  final result = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['pdf'],
+                    allowMultiple: false,
+                  );
+                  if (result == null || result.files.isEmpty) {
+                    return <String>[];
+                  }
+                  final path = result.files.single.path;
+                  return path == null ? <String>[] : <String>[path];
+                });
+              }
             }
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
                 body: SafeArea(
-                  child: FutureBuilder<String>(
-                    future: htmlFuture,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        if (snapshot.hasError) {
-                          return Center(child: Text('خطا در بارگذاری برنامه'));
-                        }
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      return InAppWebView(
-                    initialData: InAppWebViewInitialData(
-                      data: snapshot.data!,
-                      baseUrl: WebUri('file:///android_asset/flutter_assets/assets/www/'),
-                    ),
-                    initialSettings: InAppWebViewSettings(
-                      javaScriptEnabled: true,
-                      useWideViewPort: true,
-                      loadWithOverviewMode: true,
-                      supportZoom: true,
-                      builtInZoomControls: true,
-                      displayZoomControls: false,
-                      allowFileAccess: true,
-                      allowContentAccess: true,
-                      useOnShowFileChooser: true,
-                      useOnDownloadStart: true,
-                    ),
-                    onShowFileChooser: (controller, request) async {
-                      final result = await FilePicker.platform.pickFiles(
-                        allowMultiple: false,
-                        withData: false,
-                      );
-                      if (result == null) {
-                        return ShowFileChooserResponse(
-                          filePaths: null,
-                          handledByClient: true,
-                        );
-                      }
-                      final paths = result.files
-                          .where((file) => file.path != null)
-                          .map((file) => Uri.file(file.path!).toString())
-                          .toList();
-                      return ShowFileChooserResponse(
-                        filePaths: paths.isEmpty ? null : paths,
-                        handledByClient: true,
-                      );
-                    },
-                    onDownloadStartRequest: (controller, request) async {
-                      final uri = Uri.tryParse(request.url.toString());
-                      if (uri != null &&
-                          (uri.scheme == 'https' || uri.scheme == 'http')) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    },
-                    onPrintRequest: (controller, url, printJobController) async {
-                      // Let Android's native WebView print service handle window.print().
-                      return false;
-                    },
-                    );
-                    },
-                  ),
+                  child: WebViewWidget(controller: controller),
                 ),
               );
             }
@@ -153,6 +146,8 @@ jobs:
           EOF
       - name: Install dependencies
         run: flutter pub get
+      - name: Generate Android app icon
+        run: dart run flutter_launcher_icons
       - name: Analyze app source
         run: flutter analyze lib --no-fatal-infos
       - name: Build release APK
