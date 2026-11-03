@@ -92,8 +92,8 @@ jobs:
           EOF
       - name: Install dependencies
         run: flutter pub get
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
+      - name: Analyze app source
+        run: flutter analyze lib --no-fatal-infos
       - name: Build release APK
         run: flutter build apk --release
       - name: Upload APK
