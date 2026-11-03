@@ -22,6 +22,9 @@ jobs:
           unzip -o Green-Star-Android-Source.zip
           mkdir -p assets/www assets
           cp www/index.html assets/www/index.html
+          echo "===== PDF-related source inspection ====="
+          grep -nEi -C 3 'pdf|file|preview|iframe|embed|object|FileReader|URL\.createObjectURL' www/index.html | head -n 260 || true
+          echo "===== End PDF-related source inspection ====="
           cp logo.png assets/app_icon.png
           flutter create --platforms=android --org com.greenstar --project-name green_star .
           cat > pubspec.yaml <<'EOF'
