@@ -47,6 +47,7 @@ jobs:
           EOF
           cat > lib/main.dart <<'EOF'
           import 'package:flutter/material.dart';
+          import 'package:flutter/services.dart';
           import 'package:file_picker/file_picker.dart';
           import 'package:in_app_webview_flutter/flutter_inappwebview.dart';
           import 'package:url_launcher/url_launcher.dart';
@@ -73,12 +74,32 @@ jobs:
           }
 
           class _GreenStarHomeState extends State<GreenStarHome> {
+            late final Future<String> htmlFuture;
+
+            @override
+            void initState() {
+              super.initState();
+              htmlFuture = rootBundle.loadString('assets/www/index.html');
+            }
+
             @override
             Widget build(BuildContext context) {
               return Scaffold(
                 body: SafeArea(
-                  child: InAppWebView(
-                    initialFile: 'assets/www/index.html',
+                  child: FutureBuilder<String>(
+                    future: htmlFuture,
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        if (snapshot.hasError) {
+                          return Center(child: Text('خطا در بارگذاری برنامه'));
+                        }
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      return InAppWebView(
+                    initialData: InAppWebViewInitialData(
+                      data: snapshot.data!,
+                      baseUrl: WebUri('file:///android_asset/flutter_assets/assets/www/'),
+                    ),
                     initialSettings: InAppWebViewSettings(
                       javaScriptEnabled: true,
                       useWideViewPort: true,
@@ -121,6 +142,8 @@ jobs:
                     onPrintRequest: (controller, url, printJobController) async {
                       // Let Android's native WebView print service handle window.print().
                       return false;
+                    },
+                    );
                     },
                   ),
                 ),
