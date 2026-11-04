@@ -111,10 +111,13 @@ jobs:
                       await controller.runJavaScript(r"""
                         (() => {
                           const removeUnwantedControls = () => {
+                            // Hide the complete PDF panel and the print control in this build.
+                            const pdfPanel = document.getElementById('pdfCard');
+                            if (pdfPanel) pdfPanel.style.setProperty('display', 'none', 'important');
                             document.querySelectorAll('button, input, a, [role="button"]').forEach((el) => {
-                              const label = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + '')
-                                .replace(/\s+/g, ' ').trim();
-                              if (/پرینت|چاپ/.test(label) ||
+                              const label = ((el.innerText || el.value || el.getAttribute('aria-label') || el.title || '') + '')
+                                .replace(/\\s+/g, ' ').trim();
+                              if (/پرینت|چاپ|🖨|\\bprint\\b/i.test(label) ||
                                   /خروجی/.test(label) ||
                                   /ورودی/.test(label)) {
                                 el.style.setProperty('display', 'none', 'important');
