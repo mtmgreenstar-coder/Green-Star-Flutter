@@ -25,6 +25,19 @@ jobs:
           echo "===== PDF-related source inspection ====="
           grep -nEi -C 5 'pdfInput|pdfjsLibReady|pdfData|pdfZoom|pdfObjectUrl|renderPdf|loadPdf|removePdfBtn|workerSrc' www/index.html | awk 'length($0) < 4000' | tail -n 220 || true
           echo "===== End PDF-related source inspection ====="
+          python3 - <<'PY'
+          import re
+          p='www/index.html'
+          lines=open(p,encoding='utf-8').read().splitlines()
+          keys=re.compile(r'pdfInput|pdfjsLibReady|pdfData|pdfZoom|pdfObjectUrl|renderPdf|loadPdf|removePdfBtn|workerSrc|FileReader|arrayBuffer|pdfViewer|zoomIn|zoomOut|scale')
+          with open('/tmp/pdf-debug.txt','w',encoding='utf-8') as out:
+              for i,line in enumerate(lines):
+                  if keys.search(line) and len(line)<2500:
+                      lo=max(0,i-4); hi=min(len(lines),i+6)
+                      out.write(f'\\n--- lines {lo+1}-{hi} ---\\n')
+                      for n in range(lo,hi):
+                          if len(lines[n])<2500: out.write(f'{n+1}: {lines[n]}\\n')
+          PY
           cp logo.png assets/app_icon.png
           flutter create --platforms=android --org com.greenstar --project-name green_star .
           cat > pubspec.yaml <<'EOF'
@@ -155,6 +168,12 @@ jobs:
         run: flutter analyze lib --no-fatal-infos
       - name: Build release APK
         run: flutter build apk --release
+      - name: Upload PDF source diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Source-Diagnostics
+          path: /tmp/pdf-debug.txt
+          if-no-files-found: warn
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
